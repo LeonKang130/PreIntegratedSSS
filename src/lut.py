@@ -73,7 +73,7 @@ def generate_lut():
         program["zr"].write(parameters.zr)
         program["zv"].write(parameters.zv)
         program["sigmaTr"].write(parameters.sigma_tr)
-        program["albedo"].write(parameters.albedo)
+    program["albedo"].write(parameters.albedo)
     program["maxCurvature"] = MAX_CURVATURE
     vao = ctx.vertex_array(program, quad, "vertPos")
     lut_texture = ctx.texture(LUT_RES, 3, dtype="f1")

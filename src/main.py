@@ -49,7 +49,8 @@ def main():
         print("Received model data...")
     attrib = reader.GetAttrib()
     vertex_array = np.array(attrib.vertices, dtype=np.float32).reshape(-1, 3)
-    min_curvature = 10.0 / np.linalg.norm(vertex_array.max(0) - vertex_array.min(0))
+    min_curvature = 20.0 / np.linalg.norm(vertex_array.max(0) - vertex_array.min(0))
+    print(min_curvature)
     normal_vectors = np.array(attrib.normals, dtype=np.float32).reshape(-1, 3)
     normal_index_array = np.array([
         index.normal_index for shape in reader.GetShapes() for index in shape.mesh.indices
@@ -76,7 +77,7 @@ def main():
         vertex_shader=shader_source.replace("SHADER_TYPE", "VERTEX_SHADER"),
         fragment_shader=shader_source.replace("SHADER_TYPE", "FRAGMENT_SHADER")
     )
-    camera = Camera(Vector3([0.0, 1.0, 8.0]), Vector3([0.0, 0.5, 0.0]), res, 20.0)
+    camera = Camera(Vector3([0.0, 1.0, -10.0]), Vector3([0.0, 0.5, 0.0]), res, 20.0)
     program["mvp"].write(camera.mvp)
     g_position = ctx.texture(res, 3, dtype="f4")
     g_normal = ctx.texture(res, 3, dtype="f4")
@@ -163,7 +164,8 @@ def main():
     gl.glBlitFramebuffer(0, 0, res[0], res[1], 0, 0, res[0], res[1], gl.GL_COLOR_BUFFER_BIT, gl.GL_LINEAR)
     canvas_buffer = bytearray(res[0] * res[1] * 4 * 3)
     render_target.read_into(canvas_buffer)
-    plt.imsave("output.png", np.frombuffer(canvas_buffer, dtype=np.float32).reshape(res + (-1,))[::-1, ::-1])
+    postfix = sys.argv[1].split('/')[-1].split('\\')[-1].split('.')[0] + '-' + scene["equation"].lower().split('.')[-1]
+    plt.imsave(f"result-{postfix}.png", np.frombuffer(canvas_buffer, dtype=np.float32).reshape(res + (-1,))[::-1, ::-1])
 
 
 if __name__ == "__main__":
