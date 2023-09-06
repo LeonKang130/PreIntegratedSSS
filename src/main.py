@@ -49,8 +49,6 @@ def main():
         print("Received model data...")
     attrib = reader.GetAttrib()
     vertex_array = np.array(attrib.vertices, dtype=np.float32).reshape(-1, 3)
-    min_curvature = 20.0 / np.linalg.norm(vertex_array.max(0) - vertex_array.min(0))
-    print(min_curvature)
     normal_vectors = np.array(attrib.normals, dtype=np.float32).reshape(-1, 3)
     normal_index_array = np.array([
         index.normal_index for shape in reader.GetShapes() for index in shape.mesh.indices
@@ -62,38 +60,29 @@ def main():
     normal_array /= np.linalg.norm(normal_array, axis=1).reshape((-1, 1))
     ccw_check_kernel(triangle_array, vertex_array, normal_array)
     print("Model data parsing done...")
-    ctx = moderngl.create_standalone_context(450)
+    ctx = moderngl.create_standalone_context(330)
     ibo = ctx.buffer(triangle_array)
     nbo = ctx.buffer(normal_array)
     vbo = ctx.buffer(vertex_array)
-    """
-        Pass 1: Render to G-buffer
-        - Position in world coordinates
-        - Normal vector
-    """
-    with open("shaders/pass-1.glsl", "r") as f:
-        shader_source = f.read()
+    with open("shaders/vertex.glsl", "r") as f:
+        vertex_shader_source = f.read()
+    with open("shaders/fragment.glsl", "r") as f:
+        fragment_shader_source = f.read()
     program = ctx.program(
-        vertex_shader=shader_source.replace("SHADER_TYPE", "VERTEX_SHADER"),
-        fragment_shader=shader_source.replace("SHADER_TYPE", "FRAGMENT_SHADER")
+        vertex_shader=vertex_shader_source,
+        fragment_shader=fragment_shader_source
     )
     camera = Camera(Vector3([0.0, 1.0, -10.0]), Vector3([0.0, 0.5, 0.0]), res, 20.0)
     program["mvp"].write(camera.mvp)
-    g_position = ctx.texture(res, 3, dtype="f4")
-    g_normal = ctx.texture(res, 3, dtype="f4")
-    depth_buffer = ctx.depth_renderbuffer(res)
-    framebuffer = ctx.framebuffer([g_position, g_normal], depth_buffer)
     vao = ctx.vertex_array(
         program,
         [
-            (vbo, "3f", "vertPos"),
-            (nbo, "3f", "vertNormal")
+            (vbo, "3f", "vertex_pos"),
+            (nbo, "3f", "vertex_normal")
         ],
         index_buffer=ibo
     )
-    with ctx.scope(framebuffer, moderngl.CULL_FACE | moderngl.DEPTH_TEST):
-        framebuffer.clear()
-        vao.render()
+    depth_buffer = ctx.depth_renderbuffer(res, samples=4)
     point_light_size = struct.calcsize("=3f4x3f4x")
     point_light_array = scene["point_lights"]
     buffer = bytearray(max(len(point_light_array), 1) * point_light_size)
@@ -116,47 +105,22 @@ def main():
             *direction_light["direction"]
         )
     direction_light_buffer = ctx.buffer(buffer)
-    """
-        Pass 2: Render from G-buffer
-    """
-    with open("shaders/pass-2.glsl", "r") as f:
-        shader_source = f.read()
-    program = ctx.program(
-        vertex_shader=shader_source.replace("SHADER_TYPE", "VERTEX_SHADER"),
-        fragment_shader=(shader_source
-                         .replace("SHADER_TYPE", "FRAGMENT_SHADER")
-                         .replace("SPECULAR_OPTION", "WITH_SPECULAR" if scene["specular-on"] else "WITHOUT_SPECULAR")
-                         )
-    )
     look_up_table = ctx.texture(LUT_RES, 3, Image.open("look_up_table.png").tobytes(), dtype="f1")
     look_up_table.repeat_x = False
     look_up_table.repeat_y = False
-    program["lookUpTable"] = 0
+    program["lut"] = 0
     look_up_table.use(0)
-    program["gPos"] = 1
-    g_position.use(1)
-    program["gNormal"] = 2
-    g_normal.use(2)
-    program["tuneCurvature"] = scene["tune-curvature"]
-    program["minCurvature"] = min_curvature
-    program["numPointLights"] = len(point_light_array)
-    program["numDirectionLights"] = len(direction_light_array)
+    program["min_curvature"] = scene["min-curvature"]
+    program["max_curvature"] = scene["max-curvature"]
+    program["num_point_lights"] = len(point_light_array)
+    program["num_direction_lights"] = len(direction_light_array)
     point_light_buffer.bind_to_uniform_block(0)
     direction_light_buffer.bind_to_uniform_block(1)
-    vbo = ctx.buffer(np.array([
-        [-1.0, -1.0, 0.1],
-        [1.0, -1.0, 0.1],
-        [1.0, 1.0, 0.1],
-        [-1.0, -1.0, 0.1],
-        [1.0, 1.0, 0.1],
-        [-1.0, 1.0, 0.1],
-    ], dtype=np.float32))
-    vao = ctx.vertex_array(program, [(vbo, "3f", "vertPos")])
     render_target_msaa = ctx.texture(res, 3, samples=4, dtype='f4')
     render_target = ctx.texture(res, 3, dtype="f4")
-    framebuffer_msaa = ctx.framebuffer([render_target_msaa])
+    framebuffer_msaa = ctx.framebuffer([render_target_msaa], depth_attachment=depth_buffer)
     framebuffer = ctx.framebuffer([render_target])
-    with ctx.scope(framebuffer_msaa):
+    with ctx.scope(framebuffer_msaa, moderngl.DEPTH_TEST | moderngl.CULL_FACE):
         framebuffer_msaa.clear()
         vao.render()
     gl.glBindFramebuffer(gl.GL_READ_FRAMEBUFFER, framebuffer_msaa.glo)

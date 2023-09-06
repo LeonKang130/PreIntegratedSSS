@@ -63,7 +63,7 @@ def generate_lut():
             np.zeros((6, 1), dtype=np.float32)
         ])
     )
-    with open("shaders/pass-0.glsl", "r") as f:
+    with open("shaders/lut.glsl", "r") as f:
         shader_source = f.read()
     program = ctx.program(
         vertex_shader=shader_source.replace("SHADER_TYPE", "VERTEX_SHADER"),

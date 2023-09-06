@@ -63,6 +63,6 @@ void main()
         acc1 += weight * clamp(cos(theta + x), 0.0f, 1.0f);
         acc2 += weight;
     }
-    fragColor = pow(acc1 / acc2 * albedo, vec3(1.0f / 2.2f));
+    fragColor = pow(acc1 / acc2 * albedo, vec3(1.0 / 2.2));
 }
 #endif
